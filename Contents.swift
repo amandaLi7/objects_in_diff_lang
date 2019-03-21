@@ -45,6 +45,7 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
         do {
             let object = try model.prediction(image: cvbuffer!)
             mlpredictiontext = object.classLabel
+            //mlpredictiontext = "i made a prediction"
             print("###### \(object.classLabel)")
             //classLabelProbability.text = "\(object.classLabelProbs[classLabel.text!]!)"
         } catch {
@@ -82,9 +83,19 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
         // You can use this to create a sprite from an emoji,
         // like an alien monster (👾), a cat (🐱), or more (🥛, 🍩, 📦)
         //let spriteNode = SKLabelNode(text: "👾")
-        let spriteNode = SKLabelNode(text: "HI!!! \(mlpredictiontext)")
-        spriteNode.horizontalAlignmentMode = .center
-        spriteNode.verticalAlignmentMode = .center
+        let spriteNode: SKLabelNode!
+        let pixbuff: CVPixelBuffer? = sceneView.session.currentFrame?.capturedImage
+        if pixbuff != nil {
+            getPredictionFromModel(cvbuffer: pixbuff!)
+            spriteNode = SKLabelNode(text: "HI!!! \(mlpredictiontext)")
+            spriteNode.horizontalAlignmentMode = .center
+            spriteNode.verticalAlignmentMode = .center
+        } else {
+            spriteNode = SKLabelNode(text: "FAILED!")
+            spriteNode.horizontalAlignmentMode = .center
+            spriteNode.verticalAlignmentMode = .center
+        }
+        
         // Or you could create and configure a node for the anchor added to the view's session.
 //        let image = #imageLiteral(resourceName: "PearLogo.png")
 //        let spriteTexture = SKTexture(cgImage: image.cgImage!)
