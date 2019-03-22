@@ -3,17 +3,19 @@ import CoreML
 import PlaygroundSupport
 import ARKit
 import SpriteKit
+import AVFoundation
 
 class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
     
-    let model = ImageClassifier()
+    let model = ImageClassifier() // custom Core ML model I trained to recognize objects below
     var sceneView: ARSKView!
     var pixelBuffer: CVPixelBuffer?
     var mlpredictiontext: String = ""
-    let translationArray: [String: [String]] = ["backpack": ["la mochila", "书包"], "bookcase": ["la estantería", "书架"], "calculator": ["la calculadora", "计算器"], "carpet": ["la alfombra", "地毯"], "clock": ["el reloj", "钟"], "computer": ["la computadora", "计算机"], "curtain/window shade": ["la cortina", "窗帘"], "door": ["la puerta", "门"], "drinking cup": ["el vaso", "杯子"], "floor": ["el suelo", "地板"], "lamp": ["la lámpara", "灯"], "notebook": ["el cuaderno", "笔记本"], "paper": ["el papel", "纸"], "pencil": ["el lápiz", "铅笔"], "phone": ["el teléfono", "电话"], "shoe": ["los zapatos", "鞋子"], "wall": ["la pared", "墙"], "watch": ["el reloj", "手表"], "water bottle": ["la botella de agua", "水瓶"]]
-    var spanOrChinese: Bool = true //true - Spanish, false - Chinese
-    let languages = ["Spanish", "Chinese"]
+    let translationArray: [String: [String]] = ["backpack": ["la mochila", "书包"], "bookcase": ["la estantería", "书架"], "calculator": ["la calculadora", "计算器"], "carpet": ["la alfombra", "地毯"], "clock": ["el reloj", "钟"], "computer": ["la computadora", "计算机"], "curtain:window shade": ["la cortina", "窗帘"], "door": ["la puerta", "门"], "drinking cup": ["el vaso", "杯子"], "floor": ["el suelo", "地板"], "lamp": ["la lámpara", "灯"], "notebook": ["el cuaderno", "笔记本"], "paper": ["el papel", "纸"], "pencil": ["el lápiz", "铅笔"], "phone": ["el teléfono", "电话"], "shoe": ["los zapatos", "鞋子"], "wall": ["la pared", "墙"], "watch": ["el reloj", "手表"], "water bottle": ["la botella de agua", "水瓶"]]
+    var engSpanOrChinese: Int = 0 //0 - English, 1 - Spanish, 2 - Chinese
+    let languages = ["English", "Spanish", "Chinese"]
     var languagePicker: UISegmentedControl!
+    var wordSpoken: AVAudioPlayer?
     
     override func loadView() {
         sceneView = ARSKView(frame:CGRect(x: 0.0, y: 0.0, width: 500.0, height: 600.0))
@@ -29,15 +31,12 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
 
         let config = ARWorldTrackingConfiguration()
         config.planeDetection = [.horizontal, .vertical]
-        // Playground note: You can't use the audio capture capabilities
-        // of an ARSession with a Swift Playground.
-        // config.providesAudioData = true
         
         sceneView.session.delegate = self
         
         self.view = sceneView
         
-        languagePicker = UISegmentedControl(items: ["Spanish", "Chinese"])
+        languagePicker = UISegmentedControl(items: languages)
         languagePicker.addTarget(self, action: #selector(languageChosen), for: .valueChanged)
         self.view.addSubview(languagePicker)
         languagePicker.translatesAutoresizingMaskIntoConstraints = false
@@ -50,10 +49,12 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
         let idx = languagePicker.selectedSegmentIndex
         let lang = (idx == UISegmentedControl.noSegment) ? "none" : languages[idx]
         if lang == "Spanish"{
-            spanOrChinese = true
+            engSpanOrChinese = 1
         } else if lang == "Chinese"{
-            spanOrChinese = false
-        } else{
+            engSpanOrChinese = 2
+        } else if lang == "English"{
+            engSpanOrChinese = 0
+        } else {
             return
         }
     }
@@ -63,20 +64,22 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
             let object = try model.prediction(image: cvbuffer!)
             let objInEng = object.classLabel
             
-            if spanOrChinese{
+            if engSpanOrChinese == 1{
                 //in spanish
                 for key in translationArray.keys{
                     if key == objInEng{
                         mlpredictiontext = translationArray[key]![0]
                     }
                 }
-            } else {
+            } else if engSpanOrChinese == 2{
                 //in chinese
                 for key in translationArray.keys{
                     if key == objInEng{
                         mlpredictiontext = translationArray[key]![1]
                     }
                 }
+            } else if engSpanOrChinese == 0{
+                mlpredictiontext = objInEng
             }
         } catch {
             print(error)
@@ -112,10 +115,21 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
     func view(_ view: ARSKView, nodeFor anchor: ARAnchor) -> SKNode? {
         let spriteNode = SKLabelNode(text: "")
         spriteNode.fontColor = UIColor(red: 0.2, green: 0.6, blue: 0.9, alpha: 1)
+        spriteNode.fontName = "Helvetica-Bold"
+        spriteNode.isUserInteractionEnabled = true
         let pixbuff: CVPixelBuffer? = sceneView.session.currentFrame?.capturedImage
         if pixbuff != nil {
             getPredictionFromModel(cvbuffer: pixbuff!)
             spriteNode.text = "\(mlpredictiontext)"
+            if mlpredictiontext == "curtain:window shade"{
+                let audio = SKAction.playSoundFileNamed("curtain,window shade", waitForCompletion: false)
+                spriteNode.run(audio)
+
+            } else {
+                let audio = SKAction.playSoundFileNamed("\(mlpredictiontext).m4a", waitForCompletion: false)
+                spriteNode.run(audio)
+
+            }
             spriteNode.horizontalAlignmentMode = .center
             spriteNode.verticalAlignmentMode = .center
         } else {
@@ -125,18 +139,6 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
         }
     
         return spriteNode;
-    }
-    
-    func session(_ session: ARSession, didFailWithError error: Error) {
-        // Present an error message to the user
-    }
-    
-    func sessionWasInterrupted(_ session: ARSession) {
-        // Inform the user that the session has been interrupted, for example, by presenting an overlay
-    }
-    
-    func sessionInterruptionEnded(_ session: ARSession) {
-        // Reset tracking and/or remove existing anchors if consistent tracking is required
     }
 }
 
@@ -151,13 +153,6 @@ public class Scene: SKScene {
     
     public required init(coder: NSCoder) {
         super.init(coder:coder)!
-    }
-    public override func didMove(to view: SKView) {
-        // Setup your scene here
-    }
-    
-    public override func update(_ currentTime: TimeInterval) {
-        // Called before each frame is rendered
     }
 }
 
