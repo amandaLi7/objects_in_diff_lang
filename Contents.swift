@@ -10,13 +10,15 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
     var sceneView: ARSKView!
     var pixelBuffer: CVPixelBuffer?
     var mlpredictiontext: String = ""
+    let translationArray: [String: [String]] = ["backpack": ["la mochila", "书包"], "bookcase": ["la estantería", "书架"], "calculator": ["la calculadora", "计算器"], "carpet": ["la alfombra", "地毯"], "clock": ["el reloj", "钟"], "computer": ["la computadora", "计算机"], "curtain/window shade": ["la cortina", "窗帘"], "door": ["la puerta", "门"], "drinking cup": ["el vaso", "杯子"], "floor": ["el suelo", "地板"], "lamp": ["la lámpara", "灯"], "notebook": ["el cuaderno", "笔记本"], "paper": ["el papel", "纸"], "pencil": ["el lápiz", "铅笔"], "phone": ["el teléfono", "电话"], "shoe": ["los zapatos", "鞋子"], "wall": ["la pared", "墙"], "watch": ["el reloj", "手表"], "water bottle": ["la botella de agua", "水瓶"]]
+    var spanOrChinese: Bool = true //true - Spanish, false - Chinese
+    let languages = ["Spanish", "Chinese"]
+    var languagePicker: UISegmentedControl!
     
     override func loadView() {
         sceneView = ARSKView(frame:CGRect(x: 0.0, y: 0.0, width: 500.0, height: 600.0))
-        // Set the view's delegate
         sceneView.delegate = self
         
-        // Show statistics such as fps and node count
         sceneView.showsFPS = true
         sceneView.showsNodeCount = true
         
@@ -26,28 +28,56 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
         }
 
         let config = ARWorldTrackingConfiguration()
-        config.planeDetection = .horizontal
+        config.planeDetection = [.horizontal, .vertical]
         // Playground note: You can't use the audio capture capabilities
         // of an ARSession with a Swift Playground.
         // config.providesAudioData = true
         
-        // Now we'll get messages when planes were detected...
         sceneView.session.delegate = self
         
         self.view = sceneView
-        sceneView.session.run(config)
         
-
+        languagePicker = UISegmentedControl(items: ["Spanish", "Chinese"])
+        languagePicker.addTarget(self, action: #selector(languageChosen), for: .valueChanged)
+        self.view.addSubview(languagePicker)
+        languagePicker.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([languagePicker.topAnchor.constraint(equalTo: view.topAnchor, constant: 10), languagePicker.leftAnchor.constraint(equalTo: view.leftAnchor, constant: 10)])
+        
+        sceneView.session.run(config)
+    }
+    
+    @objc func languageChosen(){
+        let idx = languagePicker.selectedSegmentIndex
+        let lang = (idx == UISegmentedControl.noSegment) ? "none" : languages[idx]
+        if lang == "Spanish"{
+            spanOrChinese = true
+        } else if lang == "Chinese"{
+            spanOrChinese = false
+        } else{
+            return
+        }
     }
     
     public func getPredictionFromModel(cvbuffer: CVPixelBuffer?){
-        //from AnimalClassifier getPredictionFromModel()
         do {
             let object = try model.prediction(image: cvbuffer!)
-            mlpredictiontext = object.classLabel
-            //mlpredictiontext = "i made a prediction"
-            print("###### \(object.classLabel)")
-            //classLabelProbability.text = "\(object.classLabelProbs[classLabel.text!]!)"
+            let objInEng = object.classLabel
+            
+            if spanOrChinese{
+                //in spanish
+                for key in translationArray.keys{
+                    if key == objInEng{
+                        mlpredictiontext = translationArray[key]![0]
+                    }
+                }
+            } else {
+                //in chinese
+                for key in translationArray.keys{
+                    if key == objInEng{
+                        mlpredictiontext = translationArray[key]![1]
+                    }
+                }
+            }
         } catch {
             print(error)
         }
@@ -80,26 +110,20 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
 
     // MARK: - ARSKViewDelegate
     func view(_ view: ARSKView, nodeFor anchor: ARAnchor) -> SKNode? {
-        // You can use this to create a sprite from an emoji,
-        // like an alien monster (👾), a cat (🐱), or more (🥛, 🍩, 📦)
-        //let spriteNode = SKLabelNode(text: "👾")
-        let spriteNode: SKLabelNode!
+        let spriteNode = SKLabelNode(text: "")
+        spriteNode.fontColor = UIColor(red: 0.2, green: 0.6, blue: 0.9, alpha: 1)
         let pixbuff: CVPixelBuffer? = sceneView.session.currentFrame?.capturedImage
         if pixbuff != nil {
             getPredictionFromModel(cvbuffer: pixbuff!)
-            spriteNode = SKLabelNode(text: "HI!!! \(mlpredictiontext)")
+            spriteNode.text = "\(mlpredictiontext)"
             spriteNode.horizontalAlignmentMode = .center
             spriteNode.verticalAlignmentMode = .center
         } else {
-            spriteNode = SKLabelNode(text: "FAILED!")
+            spriteNode.text = "FAILED!"
             spriteNode.horizontalAlignmentMode = .center
             spriteNode.verticalAlignmentMode = .center
         }
-        
-        // Or you could create and configure a node for the anchor added to the view's session.
-//        let image = #imageLiteral(resourceName: "PearLogo.png")
-//        let spriteTexture = SKTexture(cgImage: image.cgImage!)
-//        let spriteNode = SKSpriteNode(texture: spriteTexture)
+    
         return spriteNode;
     }
     
@@ -119,7 +143,6 @@ class ViewController : UIViewController, ARSKViewDelegate, ARSessionDelegate {
 PlaygroundPage.current.liveView = ViewController()
 PlaygroundPage.current.needsIndefiniteExecution = true
 
-//: This is our Scene, which doesn't do a heck of a lot.
 public class Scene: SKScene {
     
     public override required init(size:CGSize) {
@@ -135,21 +158,6 @@ public class Scene: SKScene {
     
     public override func update(_ currentTime: TimeInterval) {
         // Called before each frame is rendered
-        
-        let vc = ViewController()
-        let pixbuff: CVPixelBuffer? = vc.sceneView.session.currentFrame?.capturedImage
-        if pixbuff == nil { return }
-        let coreImage = CIImage(cvPixelBuffer: pixbuff!)
-        let buffer = vc.buffer(from: convert(image: coreImage))
-        vc.getPredictionFromModel(cvbuffer: buffer)
-    }
-    
-    private func convert(image: CIImage) -> UIImage
-    {
-        let context:CIContext = CIContext.init(options: nil)
-        let cgImage:CGImage = context.createCGImage(image, from: image.extent)!
-        let image:UIImage = UIImage.init(cgImage: cgImage)
-        return image
     }
 }
 
